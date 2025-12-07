@@ -1,17 +1,14 @@
-name: Build and Push Docker Image to GHCR
+name: Build and Push Docker Image to GHCR (Date-Time Tagged)
 
 on:
   push:
     branches: [ "main" ]
-    # 可以根据需要添加其他分支或路径过滤
     paths:
       - 'Dockerfile'
       - 'backend/**'
       - 'frontend/**'
-  # 允许在 GitHub 界面手动触发
   workflow_dispatch:
 
-# 核心：授予内置 GITHUB_TOKEN 写入 Packages 的权限
 permissions:
   contents: read
   packages: write
@@ -24,12 +21,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. 设置 QEMU 和 Buildx，以支持更快的构建和多平台（可选，但推荐）
+      # 1. 设置 QEMU 和 Buildx
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # 核心修改：获取并设置精确到秒的日期时间标签
+      - name: Get current date and time for tag
+        id: date
+        run: |
+          # 格式化为 YYYYMMDD-HHMMSS，例如 20251207-152248
+          echo "TAG=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+          # 同时设置 latest 标签
+          echo "LATEST_TAG=latest" >> $GITHUB_OUTPUT
 
       # 2. 登录 GitHub Container Registry (GHCR)
       - name: Log in to GHCR
@@ -37,33 +43,16 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # 使用内置的 GITHUB_TOKEN 进行认证
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. 提取元数据 (标签、版本等)
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # 镜像名称格式：ghcr.io/<OWNER>/<REPOSITORY>
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=pr
-            # 使用 Git Tag 作为版本号 (例如 v1.0.0)
-            type=semver,pattern={{version}}
-            # 在主分支上推送时，使用 latest 标签
-            type=raw,value=latest,enable={{is_default_branch}}
-            # 使用 commit SHA 作为唯一标签
-            type=sha,format=long,prefix=sha-
-
-      # 4. 构建并推送 Docker 镜像
+      # 3. 构建并推送 Docker 镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # platforms: linux/amd64,linux/arm64 # 如果需要多架构，取消注释
+          # 组合使用日期时间标签和 latest 标签
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.date.outputs.TAG }}
+            ghcr.io/${{ github.repository }}:${{ steps.date.outputs.LATEST_TAG }}
+            platforms: linux/amd64,linux/arm64 # 如果需要多架构，取消注释
