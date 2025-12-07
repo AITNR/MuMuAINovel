@@ -21,23 +21,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. 设置 QEMU 和 Buildx
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 核心修改：获取并设置精确到秒的日期时间标签
+      # 核心步骤：获取并设置精确到秒的日期时间标签
       - name: Get current date and time for tag
         id: date
         run: |
-          # 格式化为 YYYYMMDD-HHMMSS，例如 20251207-152248
+          # 格式化为 YYYYMMDD-HHMMSS
           echo "TAG=$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-          # 同时设置 latest 标签
           echo "LATEST_TAG=latest" >> $GITHUB_OUTPUT
 
-      # 2. 登录 GitHub Container Registry (GHCR)
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -45,14 +42,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 3. 构建并推送 Docker 镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          # 组合使用日期时间标签和 latest 标签
+          # 关键修正：使用 lower() 确保仓库名称是小写
           tags: |
-            ghcr.io/${{ github.repository }}:${{ steps.date.outputs.TAG }}
-            ghcr.io/${{ github.repository }}:${{ steps.date.outputs.LATEST_TAG }}
-            platforms: linux/amd64,linux/arm64 # 如果需要多架构，取消注释
+            ghcr.io/${{ lower(github.repository) }}:${{ steps.date.outputs.TAG }}
+            ghcr.io/${{ lower(github.repository) }}:${{ steps.date.outputs.LATEST_TAG }}
+          # 如果您需要多架构构建，请取消注释下一行，并确保它与 tags 处于同一缩进级别
+          platforms: linux/amd64,linux/arm64 
